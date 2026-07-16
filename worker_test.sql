@@ -2,7 +2,7 @@
 SELECT iceberg_unmount('fw');
 
 -- 重新生成 V3 fixture 需要新目录，用 basic 测试
-SELECT iceberg_mount('fw', '/tmp/test_iceberg/basic');
+SELECT iceberg_mount('public', 'fw', '/tmp/test_iceberg/basic');
 
 -- INSERT
 INSERT INTO fw (id, amount, name) VALUES (501, 51.5, 'Worker1');

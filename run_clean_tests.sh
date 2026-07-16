@@ -2,19 +2,20 @@
 # 从干净状态逐个测试每个 flush 函数
 export PATH=/home/gv/workspace/gsvector-deps/install/bin:$PATH
 export LD_LIBRARY_PATH=/home/gv/workspace/gsvector-deps/install/lib:/home/gv/workspace/gsvector-deps/install/lib/postgresql:$LD_LIBRARY_PATH
-OUT=/mnt/c/Lze/flush_test/output
+OUT=./output
+mkdir -p "$OUT"
 
 echo "=== 清理 ==="
-psql -p 5432 -d gv -c "SELECT iceberg_unmount('ft1');" 2>&1 | grep -v "does not exist"
-psql -p 5432 -d gv -c "SELECT iceberg_unmount('ft2');" 2>&1 | grep -v "does not exist"
-psql -p 5432 -d gv -c "SELECT iceberg_unmount('ft3');" 2>&1 | grep -v "does not exist"
+psql -p 5432 -d gv -c "SELECT iceberg_unmount('ft1');" 2>&1 | grep -v "does not exist" || true
+psql -p 5432 -d gv -c "SELECT iceberg_unmount('ft2');" 2>&1 | grep -v "does not exist" || true
+psql -p 5432 -d gv -c "SELECT iceberg_unmount('ft3');" 2>&1 | grep -v "does not exist" || true
 
 echo ""
 echo "============================================================"
 echo "TEST A: iceberg_flush (异步) — 基础路径"
 echo "============================================================"
 psql -p 5432 -d gv <<'SQL' 2>&1 | tee $OUT/A_async.txt
-SELECT iceberg_mount('ft1', '/tmp/test_iceberg/basic');
+SELECT iceberg_mount('public', 'ft1', '/tmp/test_iceberg/basic');
 -- A1: 空表 flush
 SELECT 'A1_empty_flush' AS test, iceberg_flush('ft1') AS result;
 -- A2: INSERT + flush
@@ -29,9 +30,9 @@ echo "============================================================"
 echo "TEST B: iceberg_flush_sync (同步)"
 echo "============================================================"
 # 重新挂载干净表
-psql -p 5432 -d gv -c "SELECT iceberg_unmount('ft1');" 2>&1 | grep -v "does not exist"
+psql -p 5432 -d gv -c "SELECT iceberg_unmount('ft1');" 2>&1 | grep -v "does not exist" || true
 psql -p 5432 -d gv <<'SQL' 2>&1 | tee $OUT/B_sync.txt
-SELECT iceberg_mount('ft2', '/tmp/test_iceberg/basic');
+SELECT iceberg_mount('public', 'ft2', '/tmp/test_iceberg/basic');
 -- B1: 空表 sync
 SELECT 'B1_empty_sync' AS test, iceberg_flush_sync('ft2') AS result;
 -- B2: INSERT + sync
@@ -60,7 +61,7 @@ echo "============================================================"
 echo "TEST D: iceberg_flush_phase1 + phase2 (手工分阶段)"
 echo "============================================================"
 psql -p 5432 -d gv <<'SQL' 2>&1 | tee $OUT/D_phase12.txt
-SELECT iceberg_mount('ft3', '/tmp/test_iceberg/basic');
+SELECT iceberg_mount('public', 'ft3', '/tmp/test_iceberg/basic');
 -- D1: INSERT
 INSERT INTO ft3 (id, amount, name) VALUES (3001, 3.5, 'D1');
 -- D2: phase1
@@ -79,9 +80,9 @@ echo "============================================================"
 echo "TEST E: iceberg_flush_worker (后台消费)"
 echo "============================================================"
 # 重新挂载干净表
-psql -p 5432 -d gv -c "SELECT iceberg_unmount('ft3');" 2>&1 | grep -v "does not exist"
+psql -p 5432 -d gv -c "SELECT iceberg_unmount('ft3');" 2>&1 | grep -v "does not exist" || true
 psql -p 5432 -d gv <<'SQL' 2>&1 | tee $OUT/E_worker.txt
-SELECT iceberg_mount('ft3', '/tmp/test_iceberg/basic');
+SELECT iceberg_mount('public', 'ft3', '/tmp/test_iceberg/basic');
 -- E1: INSERT + phase1 only (创建 job 但不执行)
 INSERT INTO ft3 (id, amount, name) VALUES (4001, 4.5, 'E1');
 SELECT 'E1_phase1' AS test, iceberg_flush_phase1('ft3') AS job_id;

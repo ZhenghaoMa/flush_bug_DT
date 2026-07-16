@@ -1,15 +1,24 @@
 -- ============================================================
 -- Flush 功能完整测试 — 使用 V3 fixture
+-- 每个表独立 fixture 副本, 避免 flush 后互相干扰
 -- ============================================================
+
+-- 准备独立 fixture 副本
+\echo '准备 fixture 副本...'
+\! rm -rf /tmp/test_iceberg/f1 /tmp/test_iceberg/f2 /tmp/test_iceberg/f3
+\! cp -r /tmp/test_iceberg/v3_min /tmp/test_iceberg/f1
+\! cp -r /tmp/test_iceberg/v3_min /tmp/test_iceberg/f2
+\! cp -r /tmp/test_iceberg/v3_min /tmp/test_iceberg/f3
+\echo 'fixture 副本就绪'
 
 -- 清理
 SELECT iceberg_unmount('f1'); SELECT iceberg_unmount('f2'); SELECT iceberg_unmount('f3');
 
 \echo '========================================'
-\echo 'TEST 1: iceberg_flush (异步)'
+\echo 'TEST 1: iceberg_flush (异步) + worker 消费'
 \echo '========================================'
 
-SELECT iceberg_mount('f1', '/tmp/test_iceberg/v3_min');
+SELECT iceberg_mount('public', 'f1', '/tmp/test_iceberg/f1');
 
 -- 1a. 空 delta → 返回 NULL
 \echo '--- 1a: 空 delta flush (期望 NULL) ---'
@@ -24,19 +33,23 @@ SELECT iceberg_flush('f1') AS job_id;
 \echo '--- 1c: 验证数据 (期望 12) ---'
 SELECT count(*) AS rows_after_flush FROM f1;
 
--- 1d. flush_state 状态
-\echo '--- 1d: flush_state ---'
-SELECT table_name, flush_status FROM _gsiceberg.flush_state WHERE table_name = 'f1';
+-- 1d. flush_jobs — async, job 在 pending 等待 worker
+\echo '--- 1d: flush_jobs (期望 pending) ---'
+SELECT job_id, status FROM _gsiceberg.flush_jobs WHERE table_name = 'f1' ORDER BY job_id DESC LIMIT 1;
 
--- 1e. flush_jobs 状态
-\echo '--- 1e: flush_jobs ---'
-SELECT job_id, status FROM _gsiceberg.flush_jobs WHERE table_name = 'f1' ORDER BY job_id DESC LIMIT 3;
+-- 1e. worker 消费 pending job → completed
+\echo '--- 1e: worker 消费 (期望 1) ---'
+SELECT iceberg_flush_worker('f1') AS worker_result;
+
+-- 1f. 验证 job 完成
+\echo '--- 1f: job 状态 (期望 completed) ---'
+SELECT job_id, status FROM _gsiceberg.flush_jobs WHERE table_name = 'f1' ORDER BY job_id DESC LIMIT 1;
 
 \echo '========================================'
 \echo 'TEST 2: iceberg_flush_sync (同步)'
 \echo '========================================'
 
-SELECT iceberg_mount('f2', '/tmp/test_iceberg/v3_min');
+SELECT iceberg_mount('public', 'f2', '/tmp/test_iceberg/f2');
 
 -- 2a. 空 delta → 返回 false
 \echo '--- 2a: 空 delta sync (期望 false) ---'
@@ -51,7 +64,7 @@ SELECT iceberg_flush_sync('f2') AS sync_result;
 \echo '--- 2c: VIEW 是否存在 ---'
 SELECT count(*) > 0 AS view_exists FROM pg_views WHERE viewname = 'f2';
 
--- 2d. 如果 VIEW 还在，验证数据
+-- 2d. 验证数据
 \echo '--- 2d: 数据验证 ---'
 SELECT count(*) AS rows_after_sync FROM f2;
 
@@ -59,7 +72,7 @@ SELECT count(*) AS rows_after_sync FROM f2;
 \echo 'TEST 3: iceberg_flush_phase1 + phase2 (分阶段)'
 \echo '========================================'
 
--- 重新挂载 f1（如果还有VIEW的话跳过mount）
+-- 3a. INSERT
 \echo '--- 3a: INSERT ---'
 INSERT INTO f1 (id, amount, name) VALUES (301, 31.5, 'PhaseApple');
 
@@ -101,23 +114,26 @@ SELECT count(*) = 0 AS no_results FROM iceberg_flush_progress('no_such_table');
 \echo '========================================'
 
 -- 新挂载 f3
-SELECT iceberg_mount('f3', '/tmp/test_iceberg/v3_min');
+SELECT iceberg_mount('public', 'f3', '/tmp/test_iceberg/f3');
 
 -- 5a. INSERT + 仅 phase1 (创建 pending job)
 \echo '--- 5a: INSERT + phase1 ---'
 INSERT INTO f3 (id, amount, name) VALUES (401, 41.5, 'WorkerApple');
 SELECT iceberg_flush_phase1('f3') AS phase1_job;
 
--- 5b. 调用 worker 消费
-\echo '--- 5b: worker 消费 (期望 1) ---'
+-- Clean stale jobs so worker only processes f3
+DELETE FROM _gsiceberg.flush_jobs WHERE table_name != 'f3';
+
+-- 5b. 调用 worker 消费 (需 admin 权限)
+\echo '--- 5b: worker 消费 (需 admin, 期望 1) ---'
 SELECT iceberg_flush_worker('f3') AS worker_result;
 
 -- 5c. 验证数据 (10 + 1 = 11)
 \echo '--- 5c: 数据验证 (期望 11) ---'
 SELECT count(*) AS rows_after_worker FROM f3;
 
--- 5d. 无任务时 worker (期望 0)
-\echo '--- 5d: 空闲 worker (期望 0) ---'
+-- 5d. 无任务时 worker (期望 1, 队列已空排空成功)
+\echo '--- 5d: 空闲 worker (期望 1) ---'
 SELECT iceberg_flush_worker('f3') AS worker_idle;
 
 \echo '========================================'

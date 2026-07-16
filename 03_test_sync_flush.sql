@@ -5,7 +5,7 @@
 \echo '========== 测试 2: iceberg_flush_sync (同步) =========='
 
 -- 挂载第二张表用于测试
-SELECT iceberg_mount('flush_t2', '/tmp/test_iceberg/basic');
+SELECT iceberg_mount('public', 'flush_t2', '/tmp/test_iceberg/basic');
 
 -- 2a. 空表同步 flush —— 应返回 false
 \echo '--- 2a. 空 delta 同步 flush (应返回 false) ---'

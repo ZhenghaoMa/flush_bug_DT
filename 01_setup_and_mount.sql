@@ -16,7 +16,7 @@ SELECT iceberg_unmount('flush_t3') AS unmount_t3;
 
 -- 挂载测试表
 \echo '挂载 flush_t1...'
-SELECT iceberg_mount('flush_t1', '/tmp/test_iceberg/basic') AS mount_t1;
+SELECT iceberg_mount('public', 'flush_t1', '/tmp/test_iceberg/basic') AS mount_t1;
 
 -- 查看初始状态
 \echo '初始数据 (10行):'

@@ -5,7 +5,7 @@
 \echo '========== 测试 5: iceberg_flush_worker (后台消费) =========='
 
 -- 5a. 挂载第三张表
-SELECT iceberg_mount('flush_t3', '/tmp/test_iceberg/basic');
+SELECT iceberg_mount('public', 'flush_t3', '/tmp/test_iceberg/basic');
 
 -- 5b. 插入数据 + 仅做 Phase 1 (创建 job 但不执行 Phase 2)
 \echo '--- 5b. 插入数据 + Phase 1 ---'
@@ -21,7 +21,7 @@ SELECT job_id, table_name, status FROM _gsiceberg.flush_jobs
 WHERE table_name = 'flush_t3' AND status = 'pending'
 ORDER BY job_id DESC;
 
--- 5d. 调用 worker —— 应返回 1 (处理了 1 个 job)
+-- 5d. 调用 worker —— 应返回 1 (队列排空)
 \echo '--- 5d. iceberg_flush_worker (应返回 1) ---'
 SELECT iceberg_flush_worker('flush_t3') AS worker_result;
 
@@ -36,6 +36,6 @@ FROM _gsiceberg.flush_jobs
 WHERE table_name = 'flush_t3'
 ORDER BY job_id DESC LIMIT 3;
 
--- 5g. 无任务时调用 worker —— 应返回 0
-\echo '--- 5g. 无任务时 worker (应返回 0) ---'
+-- 5g. 无任务时调用 worker —— 应返回 1
+\echo '--- 5g. 无任务时 worker (应返回 1, 队列已空) ---'
 SELECT iceberg_flush_worker('flush_t3') AS worker_idle_result;
