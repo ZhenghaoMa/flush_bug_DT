@@ -1,0 +1,7 @@
+1	支持后台自动 FLUSH 与定时调度 FLUSH	李泽
+2	支持 Flush 与读写并发：增量数据冻结（Phase 1 freeze）	马正豪
+3	支持批量导入文件注册与 FLUSH 生命周期追踪（Stage foreign + DFX）	吴旭
+4	支持 Flush 阶段数据写入与元数据提交（Stage flush + 加列）	周诗洋
+5	支持 Flush 阶段索引写入与索引元数据提交（Stage train）	柯淇文
+6	支持清理 Delta 并更新 FLUSH 状态（Phase 3 cleanup）	张赛楠
+7	支持快照删除	雷璐宁
